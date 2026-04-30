@@ -147,7 +147,7 @@ WebFlux, Reactor Netty, Channel и EventLoop подробнее.
 Учебные endpoints находятся в пакете:
 
 ```text
-com.akkulov.reactive_learning.lesson01
+com.akkulov.reactive_learning.modules.V1_blocking_vs_nonblocking.lesson01
 ```
 
 Запуск приложения:
