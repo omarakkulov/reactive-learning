@@ -54,7 +54,7 @@ Response
 
 ## 2. Process / Thread / CPU / RAM / Scheduler
 
-![cpu_process.png](../../../../../../../resources/static/lesson01/cpu_process.png)
+![cpu_process.png](../../../../../../resources/static/lesson01/cpu_process.png)
 
 ````
 java -jar MyApp.jar
@@ -95,7 +95,7 @@ public static void main(...)
 
 **Процесс будет содержать хотя бы один поток. Очевидно, их может быть гораздо больше.**
 
-![cpu_threads.png](../../../../../../../resources/static/lesson01/cpu_threads.png)
+![cpu_threads.png](../../../../../../resources/static/lesson01/cpu_threads.png)
 
 ---
 
@@ -176,7 +176,7 @@ JVM Process
 
 Поговорим о различных моделях ввода/вывода:
 
-![io_models.png](../../../../../../../resources/static/lesson01/io_models.png)
+![io_models.png](../../../../../../resources/static/lesson01/io_models.png)
 
 1) **sync + blocking**
 
@@ -197,7 +197,7 @@ JVM Process
 
 ## 4. Типы коммуникаций
 
-![communication_patterns.png](../../../../../../../resources/static/lesson01/communication_patterns.png)
+![communication_patterns.png](../../../../../../resources/static/lesson01/communication_patterns.png)
 
 1) **request -> response**
 2) **request -> streaming response**
@@ -231,13 +231,13 @@ CPU не обязан простаивать целиком. Но request-thread
 
 ---
 
-![microservices-communication.png](../../../../../../../resources/static/lesson01/microservices-communication.png)
+![microservices-communication.png](../../../../../../resources/static/lesson01/microservices-communication.png)
 
 Приложения становятся гораздо сложнее
 
 ## 6. Reactive-streams
 
-![reactive-streams.png](../../../../../../../resources/static/lesson01/reactive-streams.png)
+![reactive-streams.png](../../../../../../resources/static/lesson01/reactive-streams.png)
 
 Новая спецификация Reactive Streams
 
@@ -369,24 +369,24 @@ Channel зарегистрирован на одном из EventLoop
 
 1) Регистрация Channel в EventLoop
 
-   ![cpu_threads.png](../../../../../../../resources/static/lesson01/event_loop_working_1.png)
+   ![cpu_threads.png](../../../../../../resources/static/lesson01/event_loop_working_1.png)
 
 2) Запрос преобразуется в задачу(task)
 
-   ![cpu_threads.png](../../../../../../../resources/static/lesson01/event_loop_working_2.png)
+   ![cpu_threads.png](../../../../../../resources/static/lesson01/event_loop_working_2.png)
 
 3) Эвент отправляется в очередь задач EventLoop
 
-   ![cpu_threads.png](../../../../../../../resources/static/lesson01/event_loop_working_3.png)
+   ![cpu_threads.png](../../../../../../resources/static/lesson01/event_loop_working_3.png)
 4) EventLoop забирает эвент и начинает обработку
 
-   ![cpu_threads.png](../../../../../../../resources/static/lesson01/event_loop_working_4.png)
+   ![cpu_threads.png](../../../../../../resources/static/lesson01/event_loop_working_4.png)
 5) Как только обработка закончена, результат обработки вернется в Channel
 
-   ![cpu_threads.png](../../../../../../../resources/static/lesson01/event_loop_working_5.png)
+   ![cpu_threads.png](../../../../../../resources/static/lesson01/event_loop_working_5.png)
 6) После чего будет получен клиентом
 
-   ![cpu_threads.png](../../../../../../../resources/static/lesson01/event_loop_working_6.png)
+   ![cpu_threads.png](../../../../../../resources/static/lesson01/event_loop_working_6.png)
 
 Это и есть основная концепция работы Event Loop
 
