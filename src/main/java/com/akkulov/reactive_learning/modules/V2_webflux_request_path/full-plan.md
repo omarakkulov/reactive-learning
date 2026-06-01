@@ -1,4 +1,9 @@
-# Урок 2. WebFlux Request Path
+# Урок 2. WebFlux Request Path(в прошлом)
+
+План текущей лекции оказался слишком большим и данных для изучения тоже много, поэтому, пришлось урок сократить, а остальные части будем
+разбирать в следующем уроке.
+
+# Урок 2. Netty Request Runtime (сейчас)
 
 Всем привет, сегодня, как и на прошлой лекции, мы изучаем реактивщину и продолжаем о ней говорить. Главная цель сегодняшнего урока -
 дополнить первый урок конкретным путем HTTP-запроса в Spring WebFlux приложении. И сегодня будет продемонстрирован более практический подход
@@ -8,16 +13,10 @@
 
 ```text
 - что такое Netty server в WebFlux-приложении;
-- зачем нужны `EventLoopGroup` и `EventLoop`;
 - что такое `Channel`;
 - что делает `ChannelPipeline`;
-- зачем существует Reactor Netty;
-- где начинается Spring WebFlux поверх Reactor Netty;
-- какую роль играет `HttpHandler`;
-- что такое `WebHandler`;
-- зачем нужны `HandlerMapping` и `HandlerAdapter`;
-- почему controller возвращает `Mono` или `Flux`;
-- кто подписывается на publisher и как сигналы превращаются в HTTP response;
+- EventLoopGroup / EventLoop;
+- Разбор практического Backend-сценария;
 ```
 
 ---
@@ -350,7 +349,7 @@ EventLoop последовательно обрабатывает коротки
 Второй урок отвечает на другой вопрос:
 
 ```text
-Как конкретно HTTP-запрос проходит через WebFlux-приложение?
+Понять, как HTTP-запрос входит в приложение до уровня Reactor Netty.
 ```
 
 Наша задача — научиться понимать и объяснять путь запроса в WebFlux так же, как объясняют путь запроса в Spring MVC:
@@ -374,7 +373,7 @@ Controller
 response
 ```
 
-Только теперь мы будем разбирать WebFlux-цепочку:
+Только теперь мы будем разбирать WebFlux-цепочку в двух уроках: и сегодня мы дойдем до пункта с Reactor Netty
 
 ```text
 Netty server
@@ -383,9 +382,9 @@ Channel
   ↓
 ChannelPipeline
   ↓
-EventLoopGroup
+EventLoop
   ↓
-Reactor Netty
+Reactor Netty bridge
   ↓
 Spring WebFlux поверх Netty
   ↓
@@ -1370,4 +1369,69 @@ Boss EventLoop принимает соединение
 Worker EventLoop обслуживает read/write этого Channel
 ```
 
-Нам не нужно руками создавать boss/worker группы. Это настраивает Reactor Netty под капотом. 
+Нам не нужно руками создавать boss/worker группы. Это настраивает Reactor Netty под капотом.
+
+## 15. Финал урока
+
+Сегодня мы дошли до границы Reactor Netty:
+
+```text
+Client
+  ↓
+Netty server
+  ↓
+Channel
+  ↓
+ChannelPipeline
+  ↓
+EventLoopGroup / EventLoop
+  ↓
+reactiveBridge / Reactor Netty - дальше данные идут каким-то образом в Spring Webflux
+```
+
+## 16. Следующий урок — Spring WebFlux Request Path поверх Reactor Netty
+
+Цель: Понять, как request после Reactor Netty попадает в Spring WebFlux и как результат controller-а превращается в HTTP response.
+
+Темы:
+
+```text
+1. Reactor Netty
+2. ReactorHttpHandlerAdapter
+3. HttpHandler
+4. WebHandler / WebFilter chain
+5. DispatcherHandler
+6. HandlerMapping
+7. HandlerAdapter
+8. Controller returns Mono/Flux
+9. HandlerResult
+10. HandlerResultHandler
+11. Где происходит subscribe
+12. Response write path
+```
+
+Будем изучать концептуальную модель:
+
+Spring-Webflux
+
+```text
+Reactor Netty
+  ↓
+ReactorHttpHandlerAdapter
+  ↓
+HttpHandler
+  ↓
+WebHandler
+  ↓
+DispatcherHandler
+  ↓
+HandlerMapping
+  ↓
+HandlerAdapter
+  ↓
+Controller
+  ↓
+Mono/Flux
+  ↓
+response write
+```
