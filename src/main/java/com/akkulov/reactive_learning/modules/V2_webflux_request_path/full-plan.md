@@ -797,11 +797,13 @@ java.lang.Exception: ChannelOperation terminal stack
 4. Spring/WebFlux подписывается на Publisher(Mono).
 5. Mono.delay(...) ставит timer на 3 секунды.
 6. EventLoop освобождается.
-7. Через 3 секунды default parallel Scheduler испускает сигнал 0L и EventLoop берется за продолжение обработки.
-8. map(...) выполняется уже после delay.
+7. Через 3 секунды default parallel Scheduler испускает сигнал 0L.
+8. Тот же parallel поток выполняет map(...), который вызывается после delay(после 3 секунд ожидания).
 9. createResponse() создает ResponseEntity.
-10. Дальше response передается в механизм записи HTTP-ответа.
-11. Финальный WRITE/FLUSH в Channel делает Netty/EventLoop.
+10. ResponseEntity передается в Spring WebFlux response-handling слой.
+11. Spring WebFlux превращает ResponseEntity в HTTP status, headers и body.
+12. Reactor Netty получает готовый HTTP response и возвращает запись в EventLoop.
+13. Финальный WRITE/FLUSH в Channel делает Netty/EventLoop.
 
 ## 8. Резюмируя (Аналогия с рестораном)
 
@@ -1107,3 +1109,176 @@ EventLoop может обслуживать много Channel-ов.
 разобрать ChannelPipeline — цепочку обработчиков,
 через которую байты превращаются в HTTP request и обратно в HTTP response.
 ```
+
+## 13. ChannelPipeline
+
+Мы уже разобрали, что Channel — это объект Netty, который представляет конкретное сетевое соединение.
+
+Теперь возникает следующий вопрос:
+
+```text
+Окей, в Channel пришли байты. 
+
+Но кто именно превращает эти байты в HTTP request? 
+Кто логирует сетевые события? 
+Кто кодирует HTTP response обратно в байты? 
+Кто передает управление дальше в Reactor Netty?
+```
+
+Все это как раз и делает ChannelPipeline
+
+Если объяснять на пальцах: ChannelPipeline — это цепочка обработчиков, которая прикреплена к конкретному Channel. То есть у каждого сетевого
+соединения есть не только сам Channel, но и свой конвейер обработки:
+
+Концептуально:
+
+```text
+TCP connection 
+    ↓ 
+Channel 
+    ↓ 
+ChannelPipeline 
+    ↓ 
+Handler-ы
+```
+
+Можно представить так:
+
+```text
+Channel c0fc3f5e
+┌─────────────────────────────────────────────────────────────┐
+│ ChannelPipeline                                             │
+│                                                             │
+│  [loggingHandler]                                           │
+│       ↓                                                     │
+│  [httpCodec]                                                │
+│       ↓                                                     │
+│  [httpTrafficHandler]                                       │
+│       ↓                                                     │
+│  [reactiveBridge]                                           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Главная идея:
+
+```text
+Channel — это "труба связи". ChannelPipeline — это "линия обработки" внутри этой трубы.
+```
+
+### 13.1. Зачем нужен ChannelPipeline
+
+Сетевое соединение само по себе приносит в приложение просто байты вида `47 45 54 20 2f 74 65 73 74 31 20 48 54 54 50 2f ...`
+
+Эти байты нужно обработать:
+
+```text
+сырые байты 
+    ↓ 
+распарсить HTTP-протокол 
+    ↓ 
+понять и спарсить method/path/headers/body 
+    ↓ 
+поднять событие на уровень Reactor Netty 
+    ↓ 
+передать дальше в Spring WebFlux
+```
+
+Именно это делает ChannelPipeline через набор обработчиков, а значит ChannelPipeline - это не бизнес-логика, а инфраструктурная цепочка,
+которая отвечает за обработку событий конкретного соединения.
+
+### 13.2. Handler: один шаг в конвейере
+
+Каждый элемент ChannelPipelin'а называется ChannelHandler. Где ChannelHandler — это один обработчик внутри цепочки.
+
+Один такой handler может:
+
+```text
+- залогировать событие; 
+- декодировать байты; 
+- закодировать объект обратно в байты; 
+- обработать ошибку; 
+- передать событие дальше; 
+- изменить данные; 
+- инициировать запись ответа; 
+- связать Netty с Reactor Netty.
+```
+
+Например, в логах из примера выше есть вот такой:
+
+```text
+DefaultChannelPipeline{
+ (reactor.left.loggingHandler = ReactorNettyLoggingHandler),
+  (reactor.left.httpCodec = HttpServerCodec),
+   (reactor.left.httpTrafficHandler = HttpTrafficHandler), 
+   (reactor.right.reactiveBridge = ChannelOperationsHandler) 
+ }
+```
+
+Разберем по смыслу:
+
+```text
+loggingHandler - логирует сетевые события: REGISTERED, ACTIVE, READ, WRITE, FLUSH и т.д. 
+
+httpCodec - умеет декодировать HTTP request из байтов и кодировать HTTP response обратно в байты. 
+
+httpTrafficHandler - помогает Reactor Netty управлять HTTP-трафиком, request-response обменом и особенностями HTTP-сервера. 
+
+reactiveBridge - связывает Netty ChannelPipeline с Reactor Netty reactive-моделью.
+```
+
+На этом этапе не надо знать внутренности каждого handler-а. Важно понять главное:
+
+```text
+Pipeline — это цепочка маленьких инфраструктурных обработчиков, через которую проходит каждое событие Channel-а.
+```
+
+### 13.3. Inbound ChannelPipeline "на пальцах":
+
+Когда клиент отправляет HTTP-запрос, данные идут в сторону приложения. Это называется inbound-направление.
+
+```text
+Клиент отправил байты.
+Pipeline прогнал их через обработчики. 
+HTTP codec понял, что это GET /test1. 
+Reactor Netty поднял это до HTTP request/response модели. 
+Spring WebFlux получил запрос и пошел искать controller.
+```
+
+### 13.4. Outbound ChannelPipeline "на пальцах":
+
+Когда приложение возвращает HTTP-ответ клиенту, данные идут в обратную сторону. Это называется outbound-направление.
+
+Это процесс аналогичный Inbound поведению, но обратно-пропорциональный.
+
+### 13.5. Где здесь Reactor Netty
+
+ChannelPipeline сам по себе не знает про @RestController.
+
+Для Netty вся работа — это:
+
+```text
+Channel 
+ChannelPipeline 
+ChannelHandler 
+ByteBuf 
+HTTP codec 
+read/write events
+```
+
+А Spring WebFlux живет уровнем выше:
+
+```text
+ServerWebExchange
+HandlerMapping 
+HandlerAdapter 
+Controller 
+Mono/Flux
+```
+
+Между ними нужен мост. И в наших pipeline'ах таким мостом является reactiveBridge=ChannelOperationsHandler.
+
+То есть, Netty орудует сырыми байтами, которые необходимо преобразовать в правильный вид для отправления на слой Spring Webflux, этим и
+занимается мост reactiveBridge=ChannelOperationsHandler. А значит, reactiveBridge один из ключевых элементов, через который
+Netty-события становятся частью Reactor Netty обработки.
+
