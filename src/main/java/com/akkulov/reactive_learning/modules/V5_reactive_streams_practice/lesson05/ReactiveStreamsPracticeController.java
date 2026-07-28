@@ -1,4 +1,4 @@
-package com.akkulov.reactive_learning.modules.V4_reactive_streams_practice.lesson04;
+package com.akkulov.reactive_learning.modules.V5_reactive_streams_practice.lesson05;
 
 import java.time.Duration;
 import java.util.Map;
@@ -15,7 +15,7 @@ import reactor.core.publisher.Mono;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/lesson-04")
+@RequestMapping("/api/lesson-05")
 public class ReactiveStreamsPracticeController {
 
 	private final AtomicInteger coldSubscriptionCounter = new AtomicInteger();
@@ -92,7 +92,7 @@ public class ReactiveStreamsPracticeController {
 	public Mono<Map<String, String>> error() {
 		logStage("error", "controller method invoked");
 
-		return Mono.<Map<String, String>>error(new IllegalStateException("Lesson 04 demo error"))
+		return Mono.<Map<String, String>>error(new IllegalStateException("Lesson 05 demo error"))
 				.doOnSubscribe(subscription -> logStage("error", "doOnSubscribe"))
 				.doOnRequest(requested -> logStage("error", "doOnRequest n=" + requested))
 				.doOnError(error -> logStage("error", "doOnError error=" + error.getMessage()))
@@ -133,6 +133,6 @@ public class ReactiveStreamsPracticeController {
 	}
 
 	private void logStage(String endpoint, String stage) {
-		log.info("[lesson-04:{}] {} | thread={}", endpoint, stage, Thread.currentThread().getName());
+		log.info("[lesson-05:{}] {} | thread={}", endpoint, stage, Thread.currentThread().getName());
 	}
 }

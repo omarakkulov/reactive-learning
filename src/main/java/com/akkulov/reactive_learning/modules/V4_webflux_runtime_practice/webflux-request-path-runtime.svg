@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2100" height="2550" viewBox="0 0 2100 2550">
+    <defs>
+        <style>
+            .page { fill: #f7f9fc; }
+            .title { font-family: Arial, Helvetica, sans-serif; font-size: 48px; font-weight: 700; fill: #172033; }
+            .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 24px; fill: #4d5b73; }
+            .note { font-family: Arial, Helvetica, sans-serif; font-size: 22px; fill: #334155; }
+            .lane-title { font-family: Arial, Helvetica, sans-serif; font-size: 22px; font-weight: 700; fill: #ffffff; }
+            .hint { font-family: Arial, Helvetica, sans-serif; font-size: 20px; fill: #64748b; }
+            .card { fill: #ffffff; stroke-width: 2.5; rx: 16; }
+            .card-network { stroke: #2f80ed; }
+            .card-spring { stroke: #22a06b; }
+            .card-controller { stroke: #b7791f; }
+            .card-response { stroke: #7c3aed; }
+            .explain { font-family: Arial, Helvetica, sans-serif; font-size: 22px; font-weight: 600; fill: #526173; }
+            .class-name { font-family: "Menlo", "Consolas", monospace; font-size: 27px; font-weight: 700; fill: #111827; }
+            .details { font-family: Arial, Helvetica, sans-serif; font-size: 21px; fill: #334155; }
+            .arrow { stroke: #64748b; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+            .small-arrow { stroke: #94a3b8; stroke-width: 2.5; fill: none; marker-end: url(#arrowhead-small); }
+        </style>
+        <marker id="arrowhead" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+        </marker>
+        <marker id="arrowhead-small" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/>
+        </marker>
+    </defs>
+
+    <rect class="page" x="0" y="0" width="2100" height="2550"/>
+
+    <text class="title" x="90" y="85">WebFlux Runtime Request Path</text>
+    <text class="subtitle" x="90" y="125">От входящего HTTP request до подписки на Mono/Flux и WRITE RESPONSE</text>
+
+    <rect x="90" y="215" width="250" height="46" rx="12" fill="#2f80ed"/>
+    <text class="lane-title" x="115" y="245">NETWORK RUNTIME</text>
+
+    <rect x="90" y="604" width="250" height="46" rx="12" fill="#22a06b"/>
+    <text class="lane-title" x="115" y="634">SPRING WEBFLUX</text>
+
+    <rect x="1550" y="1250" width="250" height="46" rx="12" fill="#7c3aed"/>
+    <text class="lane-title" x="1575" y="1283">RESPONSE WRITE</text>
+
+    <rect x="90" y="2075" width="250" height="46" rx="12" fill="#b7791f"/>
+    <text class="lane-title" x="130" y="2107">CONTROLLER</text>
+
+    <g id="step-1">
+        <rect class="card card-network" x="520" y="220" width="760" height="98"/>
+        <text class="explain" x="555" y="254">Клиент отправляет HTTP request по TCP connection</text>
+        <text class="class-name" x="555" y="292">Client HTTP Request</text>
+    </g>
+    <path class="arrow" d="M900 318 L900 365"/>
+
+    <g id="step-2">
+        <rect class="card card-network" x="520" y="365" width="760" height="110"/>
+        <text class="explain" x="555" y="398">Netty принимает сетевые события и HTTP bytes</text>
+        <text class="class-name" x="555" y="436">Reactor Netty HttpServer</text>
+        <text class="details" x="555" y="462">runtime поверх Netty EventLoop, соединений и буферов</text>
+    </g>
+    <path class="arrow" d="M900 475 L900 522"/>
+
+    <g id="step-3">
+        <rect class="card card-network" x="520" y="522" width="760" height="120"/>
+        <text class="explain" x="555" y="555">Мост из Reactor Netty в Spring HTTP contract</text>
+        <text class="class-name" x="555" y="593">ReactorHttpHandlerAdapter#apply</text>
+        <text class="details" x="555" y="620">передает request/response в Spring HttpHandler</text>
+    </g>
+    <path class="arrow" d="M900 642 L900 690"/>
+
+    <g id="step-4">
+        <rect class="card card-spring" x="520" y="690" width="760" height="118"/>
+        <text class="explain" x="555" y="724">Минимальная точка входа Spring WebFlux</text>
+        <text class="class-name" x="555" y="762">HttpHandler</text>
+        <text class="details" x="555" y="788">принимает request/response и возвращает Mono&lt;Void&gt;</text>
+    </g>
+    <path class="arrow" d="M900 808 L900 855"/>
+
+    <g id="step-5">
+        <rect class="card card-spring" x="520" y="855" width="760" height="126"/>
+        <text class="explain" x="555" y="889">Создает объект одного HTTP exchange</text>
+        <text class="class-name" x="555" y="927">HttpWebHandlerAdapter#handle</text>
+        <text class="details" x="555" y="954">request + response + attributes собираются в ServerWebExchange</text>
+    </g>
+    <path class="arrow" d="M900 981 L900 1028"/>
+
+    <g id="step-6">
+        <rect class="card card-spring" x="520" y="1028" width="760" height="118"/>
+        <text class="explain" x="555" y="1062">Запускает слой WebFlux filters</text>
+        <text class="class-name" x="555" y="1100">FilteringWebHandler#handle</text>
+        <text class="details" x="555" y="1126">готовит цепочку фильтров вокруг конечного handler-а</text>
+    </g>
+    <path class="arrow" d="M900 1146 L900 1193"/>
+
+    <g id="step-7">
+        <rect class="card card-spring" x="520" y="1193" width="760" height="126"/>
+        <text class="explain" x="555" y="1227">Проходит фильтры по порядку и ведет к handler-у</text>
+        <text class="class-name" x="555" y="1265">DefaultWebFilterChain</text>
+        <text class="details" x="555" y="1292">пользовательских WebFilter в учебном примере нет</text>
+    </g>
+    <path class="arrow" d="M900 1319 L900 1366"/>
+
+    <g id="step-8">
+        <rect class="card card-spring" x="520" y="1366" width="760" height="126"/>
+        <text class="explain" x="555" y="1400">Без дополнительной прикладной subscription-точки</text>
+        <text class="class-name" x="555" y="1438">Переход к конечному WebHandler</text>
+        <text class="details" x="555" y="1465">цепочка сразу передает ServerWebExchange диспетчеру</text>
+    </g>
+    <path class="arrow" d="M900 1492 L900 1539"/>
+
+    <g id="step-9">
+        <rect class="card card-spring" x="520" y="1539" width="760" height="118"/>
+        <text class="explain" x="555" y="1573">Центральный диспетчер WebFlux</text>
+        <text class="class-name" x="555" y="1611">DispatcherHandler#handle</text>
+        <text class="details" x="555" y="1637">ищет подходящий handler и запускает обработку результата</text>
+    </g>
+    <path class="arrow" d="M900 1657 L900 1704"/>
+
+    <g id="step-10">
+        <rect class="card card-spring" x="520" y="1704" width="760" height="118"/>
+        <text class="explain" x="555" y="1738">Находит controller method по method + path</text>
+        <text class="class-name" x="555" y="1776">HandlerMapping</text>
+        <text class="details" x="555" y="1802">например: GET /api/lesson-04/mono-object</text>
+    </g>
+    <path class="arrow" d="M900 1822 L900 1869"/>
+
+    <g id="step-11">
+        <rect class="card card-spring" x="520" y="1869" width="760" height="118"/>
+        <text class="explain" x="555" y="1903">Умеет вызвать найденный controller method</text>
+        <text class="class-name" x="555" y="1941">RequestMappingHandlerAdapter#handle</text>
+        <text class="details" x="555" y="1967">готовит аргументы и вызывает метод controller-а</text>
+    </g>
+    <path class="arrow" d="M900 1987 L900 2034"/>
+
+    <g id="step-12">
+        <rect class="card card-controller" x="520" y="2034" width="760" height="126"/>
+        <text class="explain" x="555" y="2068">Наш код возвращает Publisher, но не пишет socket</text>
+        <text class="class-name" x="555" y="2106">RuntimeRequestPathController</text>
+        <text class="details" x="555" y="2133">monoObject() returns Mono, fluxElements() returns Flux</text>
+    </g>
+    <path class="arrow" d="M900 2160 L900 2207"/>
+
+    <g id="step-13">
+        <rect class="card card-response" x="520" y="2207" width="760" height="126"/>
+        <text class="explain" x="555" y="2241">Spring упаковывает результат вызова handler-а</text>
+        <text class="class-name" x="555" y="2279">HandlerResult</text>
+        <text class="details" x="555" y="2306">returned value + return type + metadata для дальнейшей записи</text>
+    </g>
+
+    <path class="small-arrow" d="M1280 2270 L1320 2270"/>
+
+    <g id="response-column">
+        <rect class="card card-response" x="1320" y="1342" width="600" height="118"/>
+        <text class="explain" x="1345" y="1376">Клиент получает HTTP response</text>
+        <text class="class-name" x="1345" y="1414">WRITE RESPONSE</text>
+        <text class="details" x="1345" y="1440">JSON object или SSE stream</text>
+
+        <path class="arrow" d="M1620 1515 L1620 1460"/>
+
+        <rect class="card card-response" x="1320" y="1515" width="600" height="126"/>
+        <text class="explain" x="1345" y="1549">Передает bytes сетевому runtime</text>
+        <text class="class-name" x="1345" y="1587">Reactor Netty / Netty</text>
+        <text class="details" x="1345" y="1614">WRITE ставит bytes, FLUSH толкает в socket</text>
+
+        <path class="arrow" d="M1620 1688 L1620 1641"/>
+
+        <rect class="card card-response" x="1320" y="1688" width="600" height="126"/>
+        <text class="explain" x="1345" y="1722">Запускает reactive write body</text>
+        <text class="class-name" x="1345" y="1760">ServerHttpResponse.writeWith</text>
+        <text class="details" x="1345" y="1787">пишет Publisher&lt;DataBuffer&gt; в response</text>
+
+        <path class="arrow" d="M1620 1861 L1620 1814"/>
+
+        <rect class="card card-response" x="1320" y="1861" width="600" height="126"/>
+        <text class="explain" x="1345" y="1895">Кодирует Java object в body</text>
+        <text class="class-name" x="1345" y="1933">HttpMessageWriter</text>
+        <text class="details" x="1345" y="1960">JSON или text/event-stream</text>
+
+        <path class="arrow" d="M1620 2034 L1620 1987"/>
+
+        <rect class="card card-response" x="1320" y="2034" width="600" height="126"/>
+        <text class="explain" x="1345" y="2068">Начинает получать сигналы</text>
+        <text class="class-name" x="1345" y="2106">WebFlux subscribes</text>
+        <text class="details" x="1345" y="2133">onSubscribe, request(n), onNext</text>
+
+        <path class="arrow" d="M1620 2207 L1620 2160"/>
+
+        <rect class="card card-response" x="1320" y="2207" width="600" height="126"/>
+        <text class="explain" x="1345" y="2241">Выбирает стратегию записи body</text>
+        <text class="class-name" x="1345" y="2279">ResponseBodyResultHandler</text>
+        <text class="details" x="1345" y="2306">для @RestController response body</text>
+    </g>
+</svg>

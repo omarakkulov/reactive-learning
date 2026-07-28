@@ -1,3 +1,8 @@
 spring:
   application:
     name: reactive-learning
+
+server:
+  netty:
+    connection-timeout: 10000s  # Время на установку TCP-соединения клиентом
+    idle-timeout: 300000s

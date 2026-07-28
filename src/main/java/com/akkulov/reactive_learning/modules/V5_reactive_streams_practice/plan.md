@@ -1,4 +1,4 @@
-# Lesson 04. WebFlux Practice + Reactive Streams
+# Lesson 05. Reactive Streams Practice
 
 ## Главная идея
 
@@ -94,14 +94,14 @@ onComplete()   -> finish response
 ## Endpoints
 
 ```text
-GET /api/lesson-04/mono-simple
-GET /api/lesson-04/lazy
-GET /api/lesson-04/delay
-GET /api/lesson-04/flux
-GET /api/lesson-04/empty
-GET /api/lesson-04/error
-GET /api/lesson-04/cold
-GET /api/lesson-04/hot-demo-explanation
+GET /api/lesson-05/mono-simple
+GET /api/lesson-05/lazy
+GET /api/lesson-05/delay
+GET /api/lesson-05/flux
+GET /api/lesson-05/empty
+GET /api/lesson-05/error
+GET /api/lesson-05/cold
+GET /api/lesson-05/hot-demo-explanation
 ```
 
 ## Lazy execution

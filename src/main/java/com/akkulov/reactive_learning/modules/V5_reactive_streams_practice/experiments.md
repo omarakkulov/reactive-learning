@@ -1,4 +1,4 @@
-# Experiments. Lesson 04
+# Experiments. Lesson 05
 
 Перед экспериментами запусти приложение:
 
@@ -13,7 +13,7 @@ Gradle-тесты для этой лекции отдельно не нужны.
 Команда:
 
 ```bash
-curl "http://localhost:8080/api/lesson-04/mono-simple"
+curl "http://localhost:8080/api/lesson-05/mono-simple"
 ```
 
 Ожидаемый response:
@@ -25,12 +25,12 @@ curl "http://localhost:8080/api/lesson-04/mono-simple"
 Что смотреть в логах:
 
 ```text
-[lesson-04:mono-simple] controller method invoked
-[lesson-04:mono-simple] doOnSubscribe
-[lesson-04:mono-simple] doOnRequest n=...
-[lesson-04:mono-simple] doOnNext value=...
-[lesson-04:mono-simple] doOnSuccess value=...
-[lesson-04:mono-simple] doFinally signal=...
+[lesson-05:mono-simple] controller method invoked
+[lesson-05:mono-simple] doOnSubscribe
+[lesson-05:mono-simple] doOnRequest n=...
+[lesson-05:mono-simple] doOnNext value=...
+[lesson-05:mono-simple] doOnSuccess value=...
+[lesson-05:mono-simple] doFinally signal=...
 ```
 
 Вывод:
@@ -52,7 +52,7 @@ WebFlux подписался.
 Команда:
 
 ```bash
-curl "http://localhost:8080/api/lesson-04/lazy"
+curl "http://localhost:8080/api/lesson-05/lazy"
 ```
 
 Ожидаемый response:
@@ -90,7 +90,7 @@ Reactive chain сначала собирается.
 Команда:
 
 ```bash
-curl "http://localhost:8080/api/lesson-04/delay"
+curl "http://localhost:8080/api/lesson-05/delay"
 ```
 
 Ожидаемый response примерно через секунду:
@@ -124,7 +124,7 @@ HTTP response появится, когда Publisher испустит сигна
 Команда:
 
 ```bash
-curl -i "http://localhost:8080/api/lesson-04/empty"
+curl -i "http://localhost:8080/api/lesson-05/empty"
 ```
 
 Что смотреть:
@@ -148,7 +148,7 @@ Mono = 0..1, а не "обязательно один объект".
 Команда:
 
 ```bash
-curl -i "http://localhost:8080/api/lesson-04/error"
+curl -i "http://localhost:8080/api/lesson-05/error"
 ```
 
 Что смотреть:
@@ -156,7 +156,7 @@ curl -i "http://localhost:8080/api/lesson-04/error"
 ```text
 doOnSubscribe
 doOnRequest
-doOnError error=Lesson 04 demo error
+doOnError error=Lesson 05 demo error
 doFinally signal=onError
 ```
 
@@ -178,7 +178,7 @@ onError - terminal signal.
 Команда:
 
 ```bash
-curl "http://localhost:8080/api/lesson-04/flux"
+curl "http://localhost:8080/api/lesson-05/flux"
 ```
 
 Что смотреть:
@@ -211,8 +211,8 @@ Flux = 0..N элементов.
 Команда:
 
 ```bash
-curl "http://localhost:8080/api/lesson-04/cold"
-curl "http://localhost:8080/api/lesson-04/cold"
+curl "http://localhost:8080/api/lesson-05/cold"
+curl "http://localhost:8080/api/lesson-05/cold"
 ```
 
 Что смотреть:
@@ -242,7 +242,7 @@ YouTube-видео: каждый зритель нажимает play и смо�
 Команда:
 
 ```bash
-curl "http://localhost:8080/api/lesson-04/hot-demo-explanation"
+curl "http://localhost:8080/api/lesson-05/hot-demo-explanation"
 ```
 
 Ожидаемый response:

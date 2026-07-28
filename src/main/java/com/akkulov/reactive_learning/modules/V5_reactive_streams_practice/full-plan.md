@@ -1,30 +1,30 @@
-# Урок 4. Практика WebFlux Request Path и Reactive Streams
+# Урок 5. Практика Reactive Streams
 
-Эта лекция - первый по-настоящему практический этап курса.
+Эта лекция - следующий практический этап курса после runtime-разбора WebFlux request path.
 
-До этого мы строили карту мира:
+До этого мы строили карту мира и в runtime посмотрели путь HTTP request/response:
 
 ```text
-ОС
- -> потоки
- -> EventLoop
- -> Netty
- -> Reactor Netty
- -> Spring WebFlux request path
+ОС - управляет процессами, потоками, памятью, sockets и I/O events
+ -> потоки - единицы выполнения кода внутри процесса
+ -> EventLoop - поток/цикл, который обрабатывает I/O-события и короткие callbacks
+ -> Netty - низкоуровневый network framework поверх non-blocking I/O
+ -> Reactor Netty - реактивная интеграция Netty с Publisher/Subscriber моделью Reactor
+ -> Spring WebFlux request path - путь от HTTP-события до controller-а и записи response обратно пользователю
 ```
 
-В третьей лекции мы дошли до важной точки:
+В предыдущей лекции мы руками увидели важную точку:
 
 ```text
-Controller returns Mono/Flux
- -> HandlerResult
- -> HandlerResultHandler
- -> WebFlux subscribes
- -> signals
- -> encode body
- -> ServerHttpResponse.writeWith(...)
- -> Reactor Netty
- -> Netty WRITE / FLUSH
+Controller returns Mono/Flux - controller возвращает Publisher, а не готовые данные
+ -> HandlerResult - объект Spring WebFlux с результатом вызова handler-а
+ -> HandlerResultHandler - компонент, который умеет превратить HandlerResult в HTTP response
+ -> WebFlux subscribes - инфраструктура подписывается на Publisher, чтобы получить сигналы
+ -> signals - onSubscribe, onNext, onError, onComplete
+ -> encode body - Java-объекты превращаются в JSON/SSE/bytes через codecs
+ -> ServerHttpResponse.writeWith(...) - реактивная запись body в HTTP response
+ -> Reactor Netty - слой, который связывает WebFlux response с Netty runtime
+ -> Netty WRITE / FLUSH - постановка bytes на запись и фактический flush в socket
 ```
 
 Теперь главный вопрос:
@@ -61,24 +61,24 @@ WebFlux подписывается.
 Сигналы Publisher становятся HTTP response.
 ```
 
-## 1. Возвращаемся к третьей лекции
+## 1. Возвращаемся к лекциям 3 и 4
 
-В третьей лекции мы разобрали путь запроса внутри Spring WebFlux:
+В третьей лекции мы разобрали теорию пути запроса внутри Spring WebFlux, а в четвертой увидели этот путь в runtime:
 
 ```text
-Reactor Netty
- -> ReactorHttpHandlerAdapter
- -> HttpHandler
- -> HttpWebHandlerAdapter
- -> ServerWebExchange
- -> WebFilter chain
- -> DispatcherHandler
- -> HandlerMapping
- -> HandlerAdapter
- -> Controller returns Mono/Flux
- -> HandlerResult
- -> HandlerResultHandler
- -> response write path
+Reactor Netty - HTTP runtime поверх Netty
+ -> ReactorHttpHandlerAdapter - адаптер между Reactor Netty и Spring HttpHandler
+ -> HttpHandler - минимальный контракт Spring для обработки HTTP request/response
+ -> HttpWebHandlerAdapter - превращает request/response в ServerWebExchange
+ -> ServerWebExchange - контейнер текущего HTTP exchange
+ -> WebFilter chain - цепочка фильтров до handler-а
+ -> DispatcherHandler - центральный диспетчер WebFlux
+ -> HandlerMapping - ищет подходящий handler/controller method
+ -> HandlerAdapter - вызывает найденный handler
+ -> Controller returns Mono/Flux - controller возвращает Publisher
+ -> HandlerResult - Spring упаковывает результат вызова handler-а
+ -> HandlerResultHandler - выбирает стратегию записи результата в response
+ -> response write path - кодирование и запись body обратно в сеть
 ```
 
 Мы сказали, что controller method может вернуть:
@@ -100,8 +100,8 @@ Flux<Event>
 Вот это и есть мост:
 
 ```text
-Лекция 3 объяснила, где WebFlux подписывается на Publisher.
-Лекция 4 объясняет, что такое Publisher, что значит подписаться,
+Лекции 3 и 4 объяснили, где WebFlux подписывается на Publisher.
+Лекция 5 объясняет, что такое Publisher, что значит подписаться,
 и какие сигналы после этого начинают течь.
 ```
 
@@ -149,7 +149,7 @@ Spring подписывается, чтобы получить результа�
 Практический endpoint:
 
 ```text
-GET /api/lesson-04/mono-simple
+GET /api/lesson-05/mono-simple
 ```
 
 Он возвращает `Mono<Map<String, String>>` и логирует события жизненного цикла.
@@ -300,7 +300,7 @@ onError(error) -> сформировать error response
 onComplete()   -> завершить response
 ```
 
-Именно поэтому в третьей лекции мы говорили:
+Именно поэтому в лекциях 3 и 4 мы говорили:
 
 ```text
 WebFlux подписывается на Publisher,
@@ -312,7 +312,7 @@ WebFlux подписывается на Publisher,
 Endpoint:
 
 ```text
-GET /api/lesson-04/mono-simple
+GET /api/lesson-05/mono-simple
 ```
 
 Кодовая идея:
@@ -343,7 +343,9 @@ doFinally
 Controller method был вызван через HandlerAdapter.
 Метод вернул Mono.
 Этот Mono стал частью HandlerResult.
-HandlerResultHandler начал превращать result в response.
+HandlerResult - это "коробка Spring-а с результатом controller-а".
+Внутри важен не только сам Mono, но и тип результата, annotations, возможные status/headers и контекст обработки.
+HandlerResultHandler посмотрел на HandlerResult и выбрал стратегию, как превращать этот result в response.
 Для этого WebFlux подписался на Mono.
 После subscription мы видим сигналы.
 ```
@@ -373,7 +375,7 @@ Reactive chain похож на рецепт.
 Endpoint:
 
 ```text
-GET /api/lesson-04/lazy
+GET /api/lesson-05/lazy
 ```
 
 Кодовая идея:
@@ -413,7 +415,7 @@ supplier executed         - значение реально начали выч�
 Работа начинается при subscription.
 ```
 
-Связь с третьей лекцией:
+Связь с request path из прошлых лекций:
 
 ```text
 HandlerAdapter вызывает controller method.
@@ -426,7 +428,7 @@ HandlerAdapter вызывает controller method.
 Endpoint:
 
 ```text
-GET /api/lesson-04/delay
+GET /api/lesson-05/delay
 ```
 
 Кодовая идея:
@@ -477,9 +479,9 @@ HTTP response зависит от Publisher signals.
 Endpoints:
 
 ```text
-/api/lesson-04/mono-simple -> one value
-/api/lesson-04/empty       -> no value
-/api/lesson-04/error       -> error
+/api/lesson-05/mono-simple -> one value
+/api/lesson-05/empty       -> no value
+/api/lesson-05/error       -> error
 ```
 
 Важно:
@@ -524,7 +526,7 @@ onError
 Endpoint:
 
 ```text
-GET /api/lesson-04/flux
+GET /api/lesson-05/flux
 ```
 
 Он возвращает:
@@ -550,12 +552,20 @@ Flux хорошо подходит для streaming response:
 а последовательность элементов.
 ```
 
-Связь с третьей лекцией:
+Связь с request path из прошлых лекций:
 
 ```text
-HandlerResultHandler подписался на Flux.
+Response-writing инфраструктура, выбранная через HandlerResultHandler, инициировала подписку на Flux.
 Каждый onNext может стать очередным элементом response stream.
 onComplete завершает stream.
+```
+
+Тут важно не застрять на слишком буквальной формулировке:
+
+```text
+HandlerResultHandler - это не обязательно единственный конкретный Subscriber.
+Правильнее говорить так: HandlerResultHandler выбирает путь записи response,
+а внутри этого пути WebFlux/Reactor-инфраструктура подписывается на Publisher.
 ```
 
 ## 12. Backpressure
@@ -629,7 +639,7 @@ Flux.range(1, 3)
 Endpoint:
 
 ```text
-GET /api/lesson-04/cold
+GET /api/lesson-05/cold
 ```
 
 В коде используется `Flux.defer(...)`, чтобы показать:
@@ -672,7 +682,7 @@ Live stream, event bus, биржевые котировки, поток клик
 Endpoint:
 
 ```text
-GET /api/lesson-04/hot-demo-explanation
+GET /api/lesson-05/hot-demo-explanation
 ```
 
 Он возвращает короткое JSON-объяснение концепции.
@@ -737,19 +747,19 @@ Signals become HTTP response.
 
 ## 17. Главный вывод урока
 
-Сегодня мы руками увидели то, что в третьей лекции было архитектурной схемой.
+Сегодня мы раскрыли сигналы, которые в предыдущих лекциях были видны как подписка и запись response.
 
-Третья лекция:
+Лекции 3-4:
 
 ```text
-Controller returns Mono/Flux
- -> HandlerResult
- -> HandlerResultHandler
- -> WebFlux subscribes
- -> response write
+Controller returns Mono/Flux - controller отдает Publisher
+ -> HandlerResult - Spring упаковывает результат handler-а
+ -> HandlerResultHandler - выбирает, как писать результат в HTTP response
+ -> WebFlux subscribes - инфраструктура начинает получать сигналы
+ -> response write - сигналы превращаются в bytes и уходят через Reactor Netty/Netty
 ```
 
-Четвертая лекция:
+Пятая лекция:
 
 ```text
 Publisher
