@@ -1,4 +1,4 @@
-# Лекция 5. Reactive Streams: сначала концепция, затем код
+# Лекция 5. Reactive Streams
 
 ## 1. Что такое поток данных
 
@@ -371,16 +371,19 @@ Subscriber умеет реагировать:
 ### 4.4. Все три роли на одной схеме
 
 ```mermaid
-%%{init: {"flowchart": {"nodeSpacing": 90, "rankSpacing": 120, "padding": 30}}}%%
+%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 120, "rankSpacing": 180, "padding": 45}}}%%
 flowchart LR
-    Publisher["Publisher<br/>источник данных"]
-    Subscription["Subscription<br/>управление связью"]
-    Subscriber["Subscriber<br/>получатель данных"]
+    Publisher["<div style='width:260px;padding:26px 18px;line-height:1.7;text-align:center'><strong>Publisher</strong><br/>источник данных</div>"]
+    Subscription["<div style='width:260px;padding:26px 18px;line-height:1.7;text-align:center'><strong>Subscription</strong><br/>управление связью</div>"]
+    Subscriber["<div style='width:260px;padding:26px 18px;line-height:1.7;text-align:center'><strong>Subscriber</strong><br/>получатель данных</div>"]
     Subscriber -->|" subscribe "| Publisher
-    Publisher -->|" onSubscribe(subscription) "| Subscriber
-    Subscriber -->|" request(n) / cancel "| Subscription
+    Publisher -->|" onSubscribe<br/>(subscription) "| Subscriber
+    Subscriber -->|" request(n)<br/>cancel() "| Subscription
     Subscription -->|" управляет источником "| Publisher
-    Publisher -->|" значение / завершение / ошибка "| Subscriber
+    Publisher -->|" значение / завершение<br/>ошибка "| Subscriber
+
+    classDef role fill:#f5f3ff,stroke:#8b5cf6,stroke-width:2px,color:#262626;
+    class Publisher,Subscription,Subscriber role;
 ```
 
 Короткая формула:
@@ -483,7 +486,7 @@ subscribe(subscriber)
 
 Теперь можно перейти к коду и руками реализовать этот разговор.
 
-## 5. Практика: пользователь запрашивает данные из гипотетической БД — 30–45 минут
+## 5. Практика: пользователь запрашивает данные из гипотетической БД
 
 В примере нет настоящей базы данных. Значения захардкожены, чтобы нас не отвлекали JDBC, R2DBC, сеть и драйверы.
 
@@ -645,7 +648,7 @@ user.request(1);
 
 наша Subscription выполняет lookup и передаёт результат:
 
-```java
+```text
 Optional<UserRecord> result = database.executeLookup(userId);
 
 if (result.isPresent()) {
@@ -728,7 +731,7 @@ onSubscribe
  -> lookupCount остаётся 0
 ```
 
-## 6. Где здесь Mono, Flux и Reactor — 45–54 минуты
+## 6. Где здесь Mono, Flux и Reactor
 
 До этого момента мы обсуждали Reactive Streams как протокол.
 
@@ -999,7 +1002,7 @@ onSubscribe
 
 ### 8.3. request(n <= 0)
 
-```java
+```text
 subscription.request(0);
 subscription.request(-10);
 ```

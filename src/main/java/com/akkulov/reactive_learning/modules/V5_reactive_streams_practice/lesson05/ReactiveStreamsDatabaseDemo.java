@@ -14,8 +14,8 @@ public final class ReactiveStreamsDatabaseDemo {
     }
 
     public static void main(String[] args) {
-//        happyPath();
-        emptyAndErrorPaths();
+        happyPath();
+//        emptyAndErrorPaths();
 //        cancellationAndInvalidDemand();
 //        coldPublisher();
 //        reactorOperators();
