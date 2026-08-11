@@ -27,7 +27,7 @@ Thread три секунды ничего не вычисляет, но забл
 
 Именно для осознанного управления такими границами Reactor предоставляет `Scheduler`, `subscribeOn` и `publishOn`.
 
-## 0. Что будет понятно после лекции
+## 1. Что будет понятно после лекции
 
 После занятия слушатель сможет:
 
@@ -45,33 +45,17 @@ Thread три секунды ничего не вычисляет, но забл
 ```text
 Scheduler не ускоряет вычисление и не делает blocking API неблокирующим.
 
-Scheduler позволяет выбрать execution resource,
-на котором конкретная работа не разрушит остальную runtime-модель.
+Scheduler позволяет выбрать execution resource, на котором конкретная работа не разрушит остальную runtime-модель.
 ```
-
-## 1. Карта и тайминг лекции
-
-| Блок                                                                         | Время      |
-|------------------------------------------------------------------------------|-----------:|
-| Зачем вообще понадобились Scheduler-ы                                        |      5 мин |
-| Event loop и последствия долгой работы                                       |      8 мин |
-| CPU-bound, blocking I/O и non-blocking I/O                                   |      9 мин |
-| Thread, task, Scheduler, Worker и пул                                         |      8 мин |
-| Выбор `parallel`, dedicated CPU pool, `boundedElastic` или текущего Thread    |      8 мин |
-| Внутренняя модель `subscribeOn` и `publishOn`                                 |      9 мин |
-| HTTP/controller-примеры и ожидаемые логи                                     |      9 мин |
-| Ошибки и итог                                                                |      4 мин |
-| **Итого**                                                                    | **60 мин** |
 
 ## 2. Сначала проблема: почему понадобились Scheduler-ы
 
-### 2.1. Reactor не создаёт Thread на каждый Publisher
+### 2.1. Reactor не создаёт отдельный поток(os-thread) на каждый Publisher
 
 Создание reactive pipeline само по себе не означает:
 
 ```text
 создай новый Thread;
-выполни всё параллельно;
 перенеси работу с event loop;
 ```
 
@@ -83,20 +67,20 @@ Scheduler позволяет выбрать execution resource,
 reactor-http-nio-2
 ```
 
-и мы не создали execution boundary, пользовательский `map`, `filter` или supplier тоже может выполниться на `reactor-http-nio-2`.
+то пользовательский `map`, `filter` или supplier тоже выполнится на `reactor-http-nio-2`,
+если не указать компилятору границу выполнения вручную, создав задачи на отдельные пулы потоков
 
-Это хорошо для короткой работы:
+И event-loop прекрасно справляется в рамках короткой работы:
 
 ```text
 прочитать поле;
 проверить простое условие;
 создать маленький response object;
-передать следующий сигнал.
 ```
 
-Переключение Thread для каждой такой операции стоило бы дороже самой операции.
+Переключение Thread для каждой такой операции стоило бы дороже самой операции. (1 лекция и Scheduler операционной системы; context switch)
 
-Проблема начинается, когда короткий callback внезапно превращается в долгую работу.
+Проблема начинается, когда короткая работа внезапно превращается в долгую работу.
 
 ### 2.2. Один event loop обслуживает много соединений
 
@@ -126,7 +110,7 @@ flowchart LR
 
 Такая модель эффективна, пока каждый callback быстро возвращает управление.
 
-### 2.3. Что будет при трёхсекундном callback
+### 2.3. Что будет при трёхсекундной долгой работе
 
 Представим, что request A запустил криптографическое вычисление прямо на event loop:
 
@@ -136,24 +120,18 @@ sequenceDiagram
     participant EL as reactor-http-nio-2
     participant B as Request B
     participant C as Request C
-    A->>EL: callback с CPU-работой
+    A ->> EL: callback с CPU-работой
     Note over EL: 3 секунды занят вычислением
-    B->>EL: I/O event ждёт в очереди
-    C->>EL: I/O event ждёт в очереди
-    EL-->>A: вычисление завершено
-    EL-->>B: только теперь обработан B
-    EL-->>C: затем обработан C
+    B ->> EL: I/O event ждёт в очереди
+    C ->> EL: I/O event ждёт в очереди
+    EL -->> A: вычисление завершено
+    EL -->> B: только теперь обработан B
+    EL -->> C: затем обработан C
 ```
 
 Задержка затронула не только request A.
 
-На этом event loop могли ждать события других соединений. Поэтому правило звучит не так:
-
-```text
-«Reactive code никогда не должен работать долго».
-```
-
-А так:
+На этом event loop могли ждать события других соединений. Поэтому правило звучит так:
 
 ```text
 Event loop не должен надолго терять возможность обслуживать свои Channel-ы.
@@ -174,7 +152,7 @@ crypto Thread занимает CPU три секунды,
 
 Мы освободили event loop, но не уменьшили CPU cost.
 
-Если одновременно запустить слишком много таких вычислений, процессор всё равно насытится. Даже отдельный пул не создаёт дополнительные ядра.
+Если одновременно запустить слишком много таких вычислений, процессор всё равно будет нагружаться. Однако, eventLoop будет свободен.
 
 ## 3. Не вся долгая работа одинакова
 
@@ -270,29 +248,24 @@ flowchart LR
 sequenceDiagram
     participant EL as event-loop Thread
     participant IO as network resource
-    EL->>IO: начать неблокирующий I/O
-    EL->>EL: вернуться к другим events
-    IO-->>EL: resource ready event
-    EL->>EL: короткий callback продолжает pipeline
+    EL ->> IO: начать неблокирующий I/O
+    EL ->> EL: вернуться к другим events
+    IO -->> EL: resource ready event
+    EL ->> EL: короткий callback продолжает pipeline
 ```
-
-Здесь не нужно автоматически добавлять `boundedElastic`:
 
 ```text
 Неблокирующее ожидание уже не удерживает Thread.
-
-Дополнительный Scheduler добавит очередь и переключение,
-но не исправит проблему, которой нет.
 ```
 
 ### 3.4. Главное сравнение
 
-| Тип работы       | Что делает Thread большую часть времени | Основное ограничение         | Базовый выбор                       |
-|------------------|------------------------------------------|------------------------------|-------------------------------------|
-| Короткий callback| немного вычисляет                        | latency event loop           | остаться на текущем Thread          |
-| CPU-bound        | активно исполняет инструкции             | CPU cores                    | `parallel` или отдельный CPU pool   |
-| Blocking I/O     | ждёт синхронный ресурс                    | Threads, очередь, connections| `boundedElastic`                    |
-| Non-blocking I/O | не удерживается ожиданием                 | event loop и внешний ресурс  | не добавлять Scheduler без причины  |
+| Тип работы        | Что делает Thread большую часть времени | Основное ограничение          | Базовый выбор                      |
+|-------------------|-----------------------------------------|-------------------------------|------------------------------------|
+| Короткий callback | немного вычисляет                       | latency event loop            | остаться на текущем Thread         |
+| CPU-bound         | активно исполняет инструкции            | CPU cores                     | `parallel` или отдельный CPU pool  |
+| Blocking I/O      | ждёт синхронный ресурс                  | Threads, очередь, connections | `boundedElastic`                   |
+| Non-blocking I/O  | не удерживается ожиданием               | event loop и внешний ресурс   | не добавлять Scheduler без причины |
 
 ## 4. Архитектурная модель: Thread, task, pool, Scheduler, Worker
 
@@ -309,7 +282,7 @@ lesson06-crypto-1
 boundedElastic-1
 ```
 
-Но имя — диагностика, а не бизнес-контракт.
+Но имя потока — это некая диагностика логов, а не бизнес-контракт.
 
 ### 4.2. Task — конкретная работа
 
@@ -336,7 +309,7 @@ Thread → кто сейчас выполняет инструкции task.
 - сложность shutdown и наблюдения;
 - риск неконтролируемого создания ресурсов.
 
-Пул переиспользует ограниченный набор Threads:
+Пул потоков же переиспользует ограниченный набор Threads:
 
 ```mermaid
 flowchart LR
@@ -365,13 +338,12 @@ Tasks приходят быстрее, чем завершаются
 
 - создаёт `Worker` для планирования связанных задач;
 - поддерживает немедленное и отложенное выполнение;
-- может служить часами для time-based операторов;
 - позволяет Reactor обозначать Threads как допускающие или запрещающие blocking;
 - предоставляет общие и пользовательские реализации с разными ограничениями.
 
 ```mermaid
 flowchart LR
-    Pipeline["Reactive pipeline"] -->|"schedule task"| Scheduler
+    Pipeline["Reactive pipeline"] -->|" schedule task "| Scheduler
     Scheduler --> WA["Worker A"]
     Scheduler --> WB["Worker B"]
     WA --> E1["Execution resource 1"]
@@ -384,7 +356,7 @@ flowchart LR
 Scheduler — это один Thread.
 ```
 
-Один Scheduler может управлять несколькими workers и Threads. `Schedulers.immediate()` вообще выполняет task в текущем Thread.
+Один Scheduler может управлять несколькими workers и Threads
 
 ### 4.5. Assembly и execution
 
@@ -434,14 +406,18 @@ Mono.just(loadData());
 
 ```java
 Mono.just(payload)
-        .publishOn(Schedulers.parallel())
-        .map(this::calculateHash);
+        .
+
+publishOn(Schedulers.parallel())
+        .
+
+map(this::calculateHash);
 ```
 
 Не подходит для JDBC, `Thread.sleep`, blocking HTTP client или чтения через blocking stream.
 
 Reactor помечает default `parallel` Threads как non-blocking-only. Вызов Reactor `block()` на таком Thread приводит к
-`IllegalStateException`. Произвольный JDBC-вызов Reactor автоматически распознать не сможет: он просто займёт worker.
+`IllegalStateException`
 
 ### 5.3. Почему трёхсекундной криптографии нужен отдельный CPU Scheduler
 
@@ -451,6 +427,7 @@ Reactor помечает default `parallel` Threads как non-blocking-only. В
 Для учебного сценария создаём долгоживущий отдельный bean:
 
 ```java
+
 @Bean(name = "lesson06CryptoScheduler", destroyMethod = "dispose")
 Scheduler lesson06CryptoScheduler() {
     int cpu = Runtime.getRuntime().availableProcessors();
@@ -493,7 +470,9 @@ bounded → рост Threads и очередь имеют предел;
 
 ```java
 Mono.fromCallable(legacyRepository::loadUser)
-        .subscribeOn(Schedulers.boundedElastic());
+        .
+
+subscribeOn(Schedulers.boundedElastic());
 ```
 
 Что изменилось:
@@ -545,13 +524,13 @@ Blocking I/O на `parallel`:
 ```mermaid
 flowchart TD
     Start["Что делает стадия?"] --> Blocking{"Вызывает синхронный blocking API?"}
-    Blocking -->|"Да"| BE["lazy adapter + subscribeOn(boundedElastic)"]
-    Blocking -->|"Нет"| CPU{"Долго занимает CPU?"}
-    CPU -->|"Да, контролируемо"| Parallel["parallel"]
-    CPU -->|"Да, тяжело или нужна изоляция"| Dedicated["dedicated fixed CPU Scheduler"]
-    CPU -->|"Нет"| Async{"Это native non-blocking I/O?"}
-    Async -->|"Да"| EventLoop["Оставить event-loop модель"]
-    Async -->|"Нет, короткий callback"| Current["Остаться на текущем Thread"]
+    Blocking -->|" Да "| BE["lazy adapter + subscribeOn(boundedElastic)"]
+    Blocking -->|" Нет "| CPU{"Долго занимает CPU?"}
+    CPU -->|" Да, контролируемо "| Parallel["parallel"]
+    CPU -->|" Да, тяжело или нужна изоляция "| Dedicated["dedicated fixed CPU Scheduler"]
+    CPU -->|" Нет "| Async{"Это native non-blocking I/O?"}
+    Async -->|" Да "| EventLoop["Оставить event-loop модель"]
+    Async -->|" Нет, короткий callback "| Current["Остаться на текущем Thread"]
 ```
 
 ## 6. subscribeOn и publishOn: где поставить boundary
@@ -564,13 +543,12 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    Source["source"] -->|"onNext / onError / onComplete"| Op1["operator A"]
-    Op1 -->|"data signals"| Op2["operator B"]
-    Op2 -->|"data signals"| Subscriber["final subscriber"]
-
-    Subscriber -.->|"subscribe / request / cancel"| Op2
-    Op2 -.->|"subscription direction"| Op1
-    Op1 -.->|"subscription direction"| Source
+    Source["source"] -->|" onNext / onError / onComplete "| Op1["operator A"]
+    Op1 -->|" data signals "| Op2["operator B"]
+    Op2 -->|" data signals "| Subscriber["final subscriber"]
+    Subscriber -.->|" subscribe / request / cancel "| Op2
+    Op2 -.->|" subscription direction "| Op1
+    Op1 -.->|" subscription direction "| Source
 ```
 
 Без async boundary синхронный signal обычно продолжает обычный Java call stack на текущем Thread.
@@ -578,8 +556,12 @@ flowchart LR
 ### 6.2. subscribeOn переносит процесс подписки к source
 
 ```java
-Mono.fromCallable(() -> legacyClient.loadProfile(userId))
-        .subscribeOn(Schedulers.boundedElastic());
+Mono.fromCallable(() ->legacyClient.
+
+loadProfile(userId))
+        .
+
+subscribeOn(Schedulers.boundedElastic());
 ```
 
 `subscribeOn` означает:
@@ -606,10 +588,22 @@ blocking-вызов не успел выполниться во время assem
 
 ```java
 Mono.just(payload)
-        .doOnNext(value -> log.info("before | {}", thread()))
-        .publishOn(cryptoScheduler)
-        .map(cryptoService::calculate)
-        .doOnNext(value -> log.info("after | {}", thread()));
+        .
+
+doOnNext(value ->log.
+
+info("before | {}",thread()))
+        .
+
+publishOn(cryptoScheduler)
+        .
+
+map(cryptoService::calculate)
+        .
+
+doOnNext(value ->log.
+
+info("after | {}",thread()));
 ```
 
 `publishOn` получает upstream signal и передаёт его downstream через Worker выбранного Scheduler.
@@ -626,11 +620,11 @@ sequenceDiagram
     participant EL as reactor-http-nio
     participant B as publishOn boundary
     participant CPU as lesson06-crypto worker
-    EL->>EL: Mono source + upstream callback
-    EL->>B: onNext(payload)
-    B-->>CPU: schedule downstream task
-    CPU->>CPU: expensive crypto map
-    CPU-->>CPU: downstream onNext
+    EL ->> EL: Mono source + upstream callback
+    EL ->> B: onNext(payload)
+    B -->> CPU: schedule downstream task
+    CPU ->> CPU: expensive crypto map
+    CPU -->> CPU: downstream onNext
 ```
 
 ### 6.4. Практическая формула
@@ -707,6 +701,7 @@ curl "http://localhost:8080/api/lesson-06/current-thread"
 Controller возвращает lazy `Mono` без Scheduler:
 
 ```java
+
 @GetMapping("/current-thread")
 public Mono<Lesson06ExecutionResponse> currentThread() {
     String controllerThread = currentThreadName();
@@ -746,21 +741,30 @@ Pipeline:
 
 ```java
 return Mono.just(payload)
-        .map(value -> executeCpuWork(
+        .
+
+map(value ->
+
+executeCpuWork(
                 "cpu-on-event-loop",
                 controllerThread,
                 value,
                 durationMs
-        ));
+                ));
 ```
 
 Внутри `executeCpuWork` около трёх секунд повторяется SHA-256:
 
 ```java
-do {
-    current = digest.digest(current);
-    iterations++;
-} while (System.nanoTime() < deadlineNanos);
+do{
+current =digest.
+
+digest(current);
+
+iterations++;
+        }while(System.
+
+nanoTime() <deadlineNanos);
 ```
 
 Здесь нет `Thread.sleep`. Thread действительно вычисляет и занимает CPU.
@@ -795,17 +799,27 @@ Pipeline:
 
 ```java
 return Mono.just(payload)
-        .doOnNext(value -> log.info(
+        .
+
+doOnNext(value ->log.
+
+info(
                 "значение ещё upstream от publishOn | thread={}",
                 currentThreadName()
         ))
-        .publishOn(cryptoScheduler)
-        .map(value -> executeCpuWork(
+                .
+
+publishOn(cryptoScheduler)
+        .
+
+map(value ->
+
+executeCpuWork(
                 "cpu-on-dedicated-pool",
                 controllerThread,
                 value,
                 durationMs
-        ));
+                ));
 ```
 
 Ожидаем:
@@ -838,12 +852,14 @@ curl "http://localhost:8080/api/lesson-06/blocking-on-event-loop?userId=42&durat
 Вызов ленивый, но Scheduler не указан:
 
 ```java
-return Mono.fromCallable(() -> executeBlockingWork(
+return Mono.fromCallable(() ->
+
+executeBlockingWork(
         "blocking-on-event-loop",
         controllerThread,
         userId,
         durationMs
-));
+        ));
 ```
 
 `fromCallable` не делает вызов неблокирующим. Он только откладывает вызов до subscription.
@@ -872,13 +888,17 @@ curl "http://localhost:8080/api/lesson-06/blocking-on-bounded-elastic?userId=42&
 Правильный adapter:
 
 ```java
-return Mono.fromCallable(() -> executeBlockingWork(
+return Mono.fromCallable(() ->
+
+executeBlockingWork(
                 "blocking-on-bounded-elastic",
                 controllerThread,
                 userId,
                 durationMs
-        ))
-        .subscribeOn(Schedulers.boundedElastic());
+                ))
+        .
+
+subscribeOn(Schedulers.boundedElastic());
 ```
 
 Ожидаемые логи:
@@ -898,14 +918,14 @@ sequenceDiagram
     participant EL as reactor-http-nio
     participant BE as boundedElastic worker
     participant Legacy as blocking client
-    Client->>EL: GET request
-    EL->>EL: controller создаёт lazy Mono
-    EL->>BE: subscribeOn планирует subscription к source
-    BE->>Legacy: synchronous call
-    Note over BE,Legacy: Thread ждёт около 3 секунд
-    Legacy-->>BE: result
-    BE-->>EL: response pipeline продолжает работу
-    EL-->>Client: HTTP response
+    Client ->> EL: GET request
+    EL ->> EL: controller создаёт lazy Mono
+    EL ->> BE: subscribeOn планирует subscription к source
+    BE ->> Legacy: synchronous call
+    Note over BE, Legacy: Thread ждёт около 3 секунд
+    Legacy -->> BE: result
+    BE -->> EL: response pipeline продолжает работу
+    EL -->> Client: HTTP response
 ```
 
 Framework сам обеспечивает корректную сетевую запись. Не нужно вручную пытаться вернуть pipeline на конкретный
@@ -999,7 +1019,9 @@ Threads ждут connection pool
 
 ```java
 Mono.just(legacyClient.loadProfile(userId))
-        .subscribeOn(Schedulers.boundedElastic());
+        .
+
+subscribeOn(Schedulers.boundedElastic());
 ```
 
 Java вызовет `loadProfile` до создания `Mono`. Переносить уже выполненную работу поздно.
