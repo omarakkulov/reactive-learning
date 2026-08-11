@@ -1,7 +1,6 @@
 package com.akkulov.reactive_learning.modules.V6_threads_schedulers_practice.lesson06;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -9,10 +8,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
-
-import static com.akkulov.reactive_learning.modules.V6_threads_schedulers_practice.lesson06.Lesson06SchedulerConfiguration.CRYPTO_SCHEDULER_BEAN;
 
 @Slf4j
 @RestController
@@ -24,16 +20,13 @@ public class SchedulerLessonController {
 
     private final CpuIntensiveCryptoService cryptoService;
     private final LegacyBlockingClient blockingClient;
-    private final Scheduler cryptoScheduler;
 
     public SchedulerLessonController(
             CpuIntensiveCryptoService cryptoService,
-            LegacyBlockingClient blockingClient,
-            @Qualifier(CRYPTO_SCHEDULER_BEAN) Scheduler cryptoScheduler
+            LegacyBlockingClient blockingClient
     ) {
         this.cryptoService = cryptoService;
         this.blockingClient = blockingClient;
-        this.cryptoScheduler = cryptoScheduler;
     }
 
     @GetMapping("/current-thread")
@@ -68,19 +61,20 @@ public class SchedulerLessonController {
         logController("CPU-WRONG", controllerThread, checkedDurationMs);
 
         return Mono.just(payload)
-                .map(value -> executeCpuWork(
-                        "cpu-on-event-loop",
-                        controllerThread,
-                        value,
-                        checkedDurationMs
-                ));
+                .map(value ->
+                        executeCpuWork(
+                                "cpu-on-event-loop",
+                                controllerThread,
+                                value,
+                                checkedDurationMs
+                        ));
     }
 
     /**
-     * CPU-bound стадия после publishOn выполняется в отдельном долгоживущем CPU-пуле.
+     * CPU-bound стадия после publishOn выполняется на общем Reactor parallel Scheduler.
      */
-    @GetMapping("/cpu-on-dedicated-pool")
-    public Mono<Lesson06ExecutionResponse> cpuOnDedicatedPool(
+    @GetMapping("/cpu-on-parallel")
+    public Mono<Lesson06ExecutionResponse> cpuOnParallel(
             @RequestParam(defaultValue = "reactive") String payload,
             @RequestParam(defaultValue = "3000") long durationMs
     ) {
@@ -90,12 +84,12 @@ public class SchedulerLessonController {
 
         return Mono.just(payload)
                 .doOnNext(value -> log.info(
-                        "[CPU-CORRECT] значение ещё upstream от publishOn | thread={}",
+                        "[CPU-CORRECT] выполнение doOnNext на потоке thread={}",
                         currentThreadName()
                 ))
-                .publishOn(cryptoScheduler)
+                .publishOn(Schedulers.parallel())
                 .map(value -> executeCpuWork(
-                        "cpu-on-dedicated-pool",
+                        "cpu-on-parallel",
                         controllerThread,
                         value,
                         checkedDurationMs

@@ -10,9 +10,6 @@ import org.springframework.stereotype.Service;
 
 /**
  * Учебная CPU-bound работа.
- *
- * <p>Это не production-алгоритм хранения паролей. Повторный SHA-256 нужен только для того,
- * чтобы Thread действительно вычислял, а не ждал через {@code Thread.sleep(...)}.</p>
  */
 @Service
 public class CpuIntensiveCryptoService {

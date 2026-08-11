@@ -40,14 +40,14 @@ class SchedulerLessonControllerTests {
     }
 
     @Test
-    void cpuWorkAfterPublishOnUsesDedicatedPool() {
+    void cpuWorkAfterPublishOnUsesParallelScheduler() {
         Lesson06ExecutionResponse response = get(
-                "/api/lesson-06/cpu-on-dedicated-pool?payload=test&durationMs=2"
+                "/api/lesson-06/cpu-on-parallel?payload=test&durationMs=2"
         );
 
-        assertEquals("cpu-on-dedicated-pool", response.scenario());
+        assertEquals("cpu-on-parallel", response.scenario());
         assertNotEquals(response.controllerThread(), response.workThread());
-        assertTrue(response.workThread().startsWith("lesson06-crypto-"));
+        assertTrue(response.workThread().startsWith("parallel-"));
         assertTrue(response.result().startsWith("sha256="));
     }
 
