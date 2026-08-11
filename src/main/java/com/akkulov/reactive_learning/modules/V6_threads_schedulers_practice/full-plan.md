@@ -342,7 +342,7 @@ Blocking source → fromCallable + subscribeOn.
 V6_threads_schedulers_practice.lesson06
 ```
 
-`controllerThread` показывает, где Spring вызвал controller method. 
+`controllerThread` показывает, где Spring вызвал controller method.
 `workThread` показывает, где реально выполнялась долгая работа.
 
 ### 9.1. Базовый endpoint
@@ -440,6 +440,153 @@ controllerThread = reactor-http-nio-2
 workThread       = boundedElastic-1
 ```
 
+### 9.6. Комбинация: blocking source, затем CPU-bound обработка
+
+Теперь объединим обе задачи в одном request:
+
+```text
+1. Синхронно получить профиль из legacy-системы.
+2. После получения выполнить тяжёлое SHA-256 вычисление.
+```
+
+Запрос:
+
+```bash
+curl "http://localhost:8080/api/lesson-06/blocking-then-cpu?userId=42&blockingDurationMs=1500&cpuDurationMs=3000"
+```
+
+Pipeline:
+
+```text
+return Mono.fromCallable(() -> executeBlockingStage(
+                userId,
+                blockingDurationMs
+        ))
+        .subscribeOn(Schedulers.boundedElastic())
+        .doOnNext(stage -> log.info(
+                "blocking result перед publishOn | thread={}",
+                currentThreadName()
+        ))
+        .publishOn(Schedulers.parallel())
+        .map(stage -> executeCombinedCpuStage(
+                controllerThread,
+                stage,
+                blockingDurationMs,
+                cpuDurationMs
+        ));
+```
+
+Почему операторы расположены именно так:
+
+```text
+fromCallable
+ -> лениво описывает синхронный внешний вызов;
+
+subscribeOn(boundedElastic)
+ -> переносит subscription к source;
+ -> blocking-вызов выполняется на boundedElastic-*;
+
+publishOn(parallel)
+ -> принимает готовый профиль;
+ -> переносит следующие downstream-стадии на parallel-*;
+
+map(cpuStage)
+ -> выполняет тяжёлое вычисление уже на parallel-*.
+```
+
+```mermaid
+sequenceDiagram
+    participant EL as reactor-http-nio-2
+    participant BE as boundedElastic-1
+    participant P as parallel-1
+    EL ->> BE: subscribeOn: подписаться на blocking source
+    BE ->> BE: legacyClient.loadProfile()
+    BE ->> BE: onNext(profile) до publishOn
+    BE ->> P: publishOn: передать downstream signal
+    P ->> P: тяжёлый SHA-256
+    P -->> P: результат идёт дальше downstream
+```
+
+Ожидаемые Thread names в response:
+
+```text
+controllerThread = reactor-http-nio-2
+blockingThread   = boundedElastic-1
+cpuThread        = parallel-1
+```
+
+Автоматического возврата пользовательского pipeline на event loop после `parallel-1` нет. Когда WebFlux дойдёт до низкоуровневой записи
+response, Reactor Netty сам запланирует необходимую работу с Channel на соответствующем event loop.
+
+### 9.7. Обратная комбинация: CPU-bound обработка, затем blocking source
+
+Теперь поменяем порядок задач:
+
+```text
+1. Выполнить тяжёлое SHA-256 вычисление.
+2. После него вызвать синхронную legacy-систему.
+```
+
+Запрос:
+
+```bash
+curl "http://localhost:8080/api/lesson-06/cpu-then-blocking?payload=reactive&userId=42&cpuDurationMs=3000&blockingDurationMs=1500"
+```
+
+Pipeline:
+
+```text
+return Mono.just(payload)
+        .publishOn(Schedulers.parallel())
+        .map(value -> executeCpuStage(value, cpuDurationMs))
+        .flatMap(
+                cpuStage -> Mono.fromCallable(() ->
+                        executeBlockingStage(cpuStage, userId, blockingDurationMs)
+                )
+                .subscribeOn(Schedulers.boundedElastic())
+        );
+```
+
+Последовательность выполнения:
+
+```text
+publishOn(parallel)
+ -> переносит следующую CPU-bound стадию на parallel-*;
+
+map(cpuStage)
+ -> занимает ядро вычислением, не блокируя event loop;
+
+flatMap
+ -> после готовности CPU-результата подписывается на внутренний Mono;
+
+fromCallable + subscribeOn(boundedElastic)
+ -> лениво запускает синхронный внешний вызов на boundedElastic-*.
+```
+
+Почему здесь появился вложенный `Mono` и `flatMap`: после CPU-стадии нам нужно не просто преобразовать значение, а запустить новую
+асинхронную часть pipeline со своей границей выполнения. `map` вернул бы `Mono<Mono<Result>>`, а `flatMap` подписывается на внутренний
+`Mono` и передаёт его результат дальше.
+
+```mermaid
+sequenceDiagram
+    participant EL as reactor-http-nio-2
+    participant P as parallel-1
+    participant BE as boundedElastic-1
+    EL ->> P: publishOn: передать downstream signal
+    P ->> P: тяжёлый SHA-256
+    P ->> BE: flatMap + subscribeOn: подписаться на blocking source
+    BE ->> BE: legacyClient.loadProfile()
+    BE -->> BE: результат идёт дальше downstream
+```
+
+Ожидаемые Thread names в response:
+
+```text
+controllerThread = reactor-http-nio-2
+cpuThread        = parallel-1
+blockingThread   = boundedElastic-1
+```
+
 ## 10. Типичные ошибки
 
 ### «Scheduler ускоряет работу»
@@ -466,25 +613,7 @@ workThread       = boundedElastic-1
 
 Нет. Настоящее non-blocking I/O не удерживает Thread ожиданием.
 
-## 11. Итог
-
-```text
-Короткая работа: остаться на event loop.
-
-CPU-bound работа: publishOn(Schedulers.parallel()).
-
-Blocking source:
-Mono.fromCallable(...)
-    .subscribeOn(Schedulers.boundedElastic()).
-```
-
-Финальная мысль:
-
-```text
-В хорошем pipeline мало Scheduler boundaries, но каждая из них имеет конкретную причину.
-```
-
-## 13. Источники
+## 11. Источники
 
 - [Project Reactor: Threading and Schedulers](https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html)
 - [Project Reactor FAQ: wrapping a synchronous blocking call](https://projectreactor.io/docs/core/release/reference/faq.html#faq.wrap-blocking)

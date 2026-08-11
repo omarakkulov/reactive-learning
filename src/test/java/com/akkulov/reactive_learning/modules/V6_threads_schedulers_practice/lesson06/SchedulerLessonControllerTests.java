@@ -75,6 +75,46 @@ class SchedulerLessonControllerTests {
     }
 
     @Test
+    void combinedPipelineUsesBoundedElasticThenParallel() {
+        Lesson06CombinedExecutionResponse response = webTestClient.get()
+                .uri("/api/lesson-06/blocking-then-cpu?userId=42&blockingDurationMs=2&cpuDurationMs=2")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(Lesson06CombinedExecutionResponse.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertNotNull(response);
+        assertEquals("blocking-then-cpu", response.scenario());
+        assertNotEquals(response.controllerThread(), response.blockingThread());
+        assertTrue(response.blockingThread().contains("boundedElastic"));
+        assertNotEquals(response.blockingThread(), response.cpuThread());
+        assertTrue(response.cpuThread().startsWith("parallel-"));
+        assertTrue(response.result().contains("legacy-profile-for-42"));
+        assertTrue(response.result().contains("sha256="));
+    }
+
+    @Test
+    void reverseCombinedPipelineUsesParallelThenBoundedElastic() {
+        Lesson06CombinedExecutionResponse response = webTestClient.get()
+                .uri("/api/lesson-06/cpu-then-blocking?payload=test&userId=42&cpuDurationMs=2&blockingDurationMs=2")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(Lesson06CombinedExecutionResponse.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertNotNull(response);
+        assertEquals("cpu-then-blocking", response.scenario());
+        assertNotEquals(response.controllerThread(), response.cpuThread());
+        assertTrue(response.cpuThread().startsWith("parallel-"));
+        assertNotEquals(response.cpuThread(), response.blockingThread());
+        assertTrue(response.blockingThread().contains("boundedElastic"));
+        assertTrue(response.result().contains("sha256="));
+        assertTrue(response.result().contains("legacy-profile-for-42"));
+    }
+
+    @Test
     void rejectsDurationBelowAndAboveEducationalRange() {
         webTestClient.get()
                 .uri("/api/lesson-06/cpu-on-event-loop?durationMs=0")

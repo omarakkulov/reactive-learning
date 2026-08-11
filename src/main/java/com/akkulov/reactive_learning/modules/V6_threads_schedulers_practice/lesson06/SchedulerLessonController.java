@@ -137,6 +137,85 @@ public class SchedulerLessonController {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
+    /**
+     * Составной правильный сценарий:
+     * blocking source выполняется на boundedElastic, а последующая CPU-bound стадия — на parallel.
+     */
+    @GetMapping("/blocking-then-cpu")
+    public Mono<Lesson06CombinedExecutionResponse> blockingThenCpu(
+            @RequestParam(defaultValue = "42") String userId,
+            @RequestParam(defaultValue = "1500") long blockingDurationMs,
+            @RequestParam(defaultValue = "3000") long cpuDurationMs
+    ) {
+        long checkedBlockingDurationMs = validateDuration(blockingDurationMs);
+        long checkedCpuDurationMs = validateDuration(cpuDurationMs);
+        String controllerThread = currentThreadName();
+
+        log.info(
+                "[COMBINED] controller method, blockingDurationMs={}, cpuDurationMs={} | thread={}",
+                checkedBlockingDurationMs,
+                checkedCpuDurationMs,
+                controllerThread
+        );
+
+        return Mono.fromCallable(() -> executeBlockingStage(
+                        userId,
+                        checkedBlockingDurationMs
+                ))
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnNext(stage -> log.info(
+                        "[COMBINED] blocking result перед publishOn | thread={}",
+                        currentThreadName()
+                ))
+                .publishOn(Schedulers.parallel())
+                .map(stage -> executeCombinedCpuStage(
+                        controllerThread,
+                        stage,
+                        checkedBlockingDurationMs,
+                        checkedCpuDurationMs
+                ));
+    }
+
+    /**
+     * Зеркальный составной сценарий:
+     * CPU-bound стадия выполняется на parallel, затем blocking source — на boundedElastic.
+     */
+    @GetMapping("/cpu-then-blocking")
+    public Mono<Lesson06CombinedExecutionResponse> cpuThenBlocking(
+            @RequestParam(defaultValue = "reactive") String payload,
+            @RequestParam(defaultValue = "42") String userId,
+            @RequestParam(defaultValue = "3000") long cpuDurationMs,
+            @RequestParam(defaultValue = "1500") long blockingDurationMs
+    ) {
+        long checkedCpuDurationMs = validateDuration(cpuDurationMs);
+        long checkedBlockingDurationMs = validateDuration(blockingDurationMs);
+        String controllerThread = currentThreadName();
+
+        log.info(
+                "[CPU-THEN-BLOCKING] controller method, cpuDurationMs={}, blockingDurationMs={} | thread={}",
+                checkedCpuDurationMs,
+                checkedBlockingDurationMs,
+                controllerThread
+        );
+
+        return Mono.just(payload)
+                .publishOn(Schedulers.parallel())
+                .map(value -> executeCombinedCpuStage(
+                        value,
+                        checkedCpuDurationMs
+                ))
+                .flatMap(
+                        cpuStage -> Mono.fromCallable(() -> executeBlockingAfterCpuStage(
+                                        controllerThread,
+                                        cpuStage,
+                                        userId,
+                                        checkedCpuDurationMs,
+                                        checkedBlockingDurationMs
+                                ))
+                                .subscribeOn(Schedulers.boundedElastic())
+                );
+    }
+
     private Lesson06ExecutionResponse executeCpuWork(
             String scenario,
             String controllerThread,
@@ -199,6 +278,111 @@ public class SchedulerLessonController {
         );
     }
 
+    private BlockingStageResult executeBlockingStage(String userId, long durationMs) {
+        String blockingThread = currentThreadName();
+        long startedNanos = System.nanoTime();
+        log.info("[COMBINED] blocking stage START | thread={}", blockingThread);
+
+        String profile = blockingClient.loadProfile(userId, durationMs);
+
+        long actualDurationMs = elapsedMillis(startedNanos);
+        log.info(
+                "[COMBINED] blocking stage END, actualDurationMs={} | thread={}",
+                actualDurationMs,
+                currentThreadName()
+        );
+        return new BlockingStageResult(profile, blockingThread, actualDurationMs);
+    }
+
+    private Lesson06CombinedExecutionResponse executeCombinedCpuStage(
+            String controllerThread,
+            BlockingStageResult blockingStage,
+            long requestedBlockingDurationMs,
+            long requestedCpuDurationMs
+    ) {
+        String cpuThread = currentThreadName();
+        long startedNanos = System.nanoTime();
+        log.info("[COMBINED] CPU stage START | thread={}", cpuThread);
+
+        CpuIntensiveCryptoService.CryptoComputation computation =
+                cryptoService.repeatedlyHashFor(blockingStage.profile(), requestedCpuDurationMs);
+
+        long actualCpuDurationMs = elapsedMillis(startedNanos);
+        log.info(
+                "[COMBINED] CPU stage END, iterations={}, actualDurationMs={} | thread={}",
+                computation.iterations(),
+                actualCpuDurationMs,
+                currentThreadName()
+        );
+
+        return new Lesson06CombinedExecutionResponse(
+                "blocking-then-cpu",
+                controllerThread,
+                blockingStage.thread(),
+                cpuThread,
+                requestedBlockingDurationMs,
+                blockingStage.actualDurationMs(),
+                requestedCpuDurationMs,
+                actualCpuDurationMs,
+                "profile=" + blockingStage.profile()
+                        + ", sha256=" + computation.hash()
+                        + ", iterations=" + computation.iterations()
+        );
+    }
+
+    private CpuStageResult executeCombinedCpuStage(String payload, long durationMs) {
+        String cpuThread = currentThreadName();
+        long startedNanos = System.nanoTime();
+        log.info("[CPU-THEN-BLOCKING] CPU stage START | thread={}", cpuThread);
+
+        CpuIntensiveCryptoService.CryptoComputation computation =
+                cryptoService.repeatedlyHashFor(payload, durationMs);
+
+        long actualDurationMs = elapsedMillis(startedNanos);
+        log.info(
+                "[CPU-THEN-BLOCKING] CPU stage END, iterations={}, actualDurationMs={} | thread={}",
+                computation.iterations(),
+                actualDurationMs,
+                currentThreadName()
+        );
+        return new CpuStageResult(computation, cpuThread, actualDurationMs);
+    }
+
+    private Lesson06CombinedExecutionResponse executeBlockingAfterCpuStage(
+            String controllerThread,
+            CpuStageResult cpuStage,
+            String userId,
+            long requestedCpuDurationMs,
+            long requestedBlockingDurationMs
+    ) {
+        String blockingThread = currentThreadName();
+        long startedNanos = System.nanoTime();
+        log.info("[CPU-THEN-BLOCKING] blocking stage START | thread={}", blockingThread);
+
+        String profile = blockingClient.loadProfile(userId, requestedBlockingDurationMs);
+
+        long actualBlockingDurationMs = elapsedMillis(startedNanos);
+        log.info(
+                "[CPU-THEN-BLOCKING] blocking stage END, actualDurationMs={} | thread={}",
+                actualBlockingDurationMs,
+                currentThreadName()
+        );
+
+        return new Lesson06CombinedExecutionResponse(
+                "cpu-then-blocking",
+                controllerThread,
+                blockingThread,
+                cpuStage.thread(),
+                requestedBlockingDurationMs,
+                actualBlockingDurationMs,
+                requestedCpuDurationMs,
+                cpuStage.actualDurationMs(),
+                "sha256=" + cpuStage.computation().hash()
+                        + ", iterations=" + cpuStage.computation().iterations()
+                        + ", profile=" + profile
+        );
+    }
+
     private long validateDuration(long durationMs) {
         if (durationMs < MIN_DURATION_MS || durationMs > MAX_DURATION_MS) {
             throw new ResponseStatusException(
@@ -224,5 +408,19 @@ public class SchedulerLessonController {
 
     private String currentThreadName() {
         return Thread.currentThread().getName();
+    }
+
+    private record BlockingStageResult(
+            String profile,
+            String thread,
+            long actualDurationMs
+    ) {
+    }
+
+    private record CpuStageResult(
+            CpuIntensiveCryptoService.CryptoComputation computation,
+            String thread,
+            long actualDurationMs
+    ) {
     }
 }
