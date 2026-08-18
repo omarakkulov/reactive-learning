@@ -47,7 +47,7 @@ Reactive Feign работает поверх неблокирующего WebCli
 
 ## 3. Reactive Feign client
 
-```text
+```java
 @ReactiveFeignClient(
         name = "lesson07-product-service",
         url = "${lesson07.product-service.url:https://dummyjson.com}"
@@ -68,7 +68,7 @@ public interface Lesson07ProductReactiveClient {
 
 Интерфейс описывает URL, HTTP method, параметры и ожидаемый успешный JSON.
 
-```text
+```java
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Lesson07Product(
         long id,
@@ -118,7 +118,7 @@ flowchart LR
 `onErrorResume` не возвращается в сломанный HTTP request. Он заменяет завершившийся
 publisher новым:
 
-```text
+```java
 .onErrorResume(SomeException.class, error ->
         Mono.just(new Failure(...))
 )
@@ -148,10 +148,10 @@ ReactiveFeignException → HTTP 502 + Failure(TRANSPORT)
 
 Каждый обработка реагирует только на свой тип ошибки:
 
-```text
+```java
 .onErrorResume(TimeoutException.class, ...)
-.onErrorResume(FeignException.class, ...)
-.onErrorResume(ReactiveFeignException.class, ...)
+.onErrorResume(FeignException.class, ...) //HTTP-ответ получен, но статус ошибочный
+.onErrorResume(ReactiveFeignException.class, ...) //HTTP-ответ не удалось нормально получить(DNS → TCP → TLS → отправка запроса → HTTP-ответ → чтение JSON)
 ```
 
 Если первый тип не совпал, Reactor проверяет следующий оператор. Как только ошибка
@@ -178,7 +178,7 @@ public Mono<ResponseEntity<Lesson07CallResult>> serviceUnavailable() {
 
 `retry(2)` означает:
 
-```text
+```java
 HTTP request #1 → onError
         ↓ retry
 HTTP request #2 → onError
