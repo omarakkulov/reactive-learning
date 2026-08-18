@@ -53,7 +53,6 @@ public class Lesson07Controller {
         }
 
         return handleExternalCall(productClient.findProduct(productId, delayMs));
-        return handleExternalCall(productClient.findProduct(productId, delayMs));
     }
 
     @GetMapping("/unavailable")
